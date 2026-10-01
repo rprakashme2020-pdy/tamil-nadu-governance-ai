@@ -1,5 +1,7 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { createHash } from "node:crypto";
+import { db } from "../db/client";
 const local = new Map<string, { count: number; until: number }>();
 export async function allowed(key: string) {
   if (
@@ -13,10 +15,14 @@ export async function allowed(key: string) {
     });
     return (await limiter.limit(key)).success;
   }
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.NEXT_PUBLIC_SUPABASE_URL
-  )
+  const database = db();
+  if (database) {
+    const { data, error } = await database.rpc("consume_request_limit", {
+      key_hash: createHash("sha256").update(key).digest("hex"),
+    });
+    return !error && data === true;
+  }
+  if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_SUPABASE_URL)
     return false;
   const now = Date.now();
   if (local.size > 10000)
