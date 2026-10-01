@@ -1,0 +1,16 @@
+project_id = "tamil-nadu-governance-ai"
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]
+[db]
+port = 54322
+major_version = 15
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+enable_signup = false
+[storage]
+enabled = true
+file_size_limit = "10MiB"

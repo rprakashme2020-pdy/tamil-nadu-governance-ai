@@ -1,0 +1,42 @@
+{
+  "name": "tamil-nadu-governance-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "evaluate": "node --import tsx scripts/evaluate.ts",
+    "seed": "node --env-file=.env.local --import tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
+    "@upstash/ratelimit": "^2.0.7",
+    "@upstash/redis": "^1.35.0",
+    "lucide-react": "^0.468.0",
+    "mammoth": "^1.10.0",
+    "next": "16.3.8",
+    "pdf-parse": "^2.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "^7.62.0",
+    "recharts": "^3.2.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "agent-browser": "^0.38.1",
+    "eslint": "^9.35.0",
+    "eslint-config-next": "16.3.8",
+    "prettier": "^3.9.9",
+    "tailwindcss": "^4.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
