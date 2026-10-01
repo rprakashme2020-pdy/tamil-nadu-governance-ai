@@ -9,7 +9,7 @@ This repository contains a runnable Next.js application and the Phase 1 foundati
 
 Without credentials, the public app works against a small bundled, source-checked demonstration dataset. Supabase mode uses the configured database exclusively: it does not silently fall back to demo facts on database failure. No invented beneficiary, employment, budget or outcome values are seeded.
 
-The admin workflow is implemented but requires a configured Supabase project. SQL migrations, RLS, Auth, Storage and the optional external AI provider were not exercised against live services in this delivery. The browser runtime was unavailable, so visual/mobile and screen-reader QA remain outstanding. Most main navigation, question flows, and evidence answers are bilingual; some detailed public explanatory text and admin labels remain English and need editorial Tamil translation before a full bilingual release.
+A Supabase project has been provisioned and initial migrations, data, anonymous RLS checks and the database-backed rate limiter were exercised live. Administrator creation, evidence upload/review, provider integration and complete visual/mobile and screen-reader QA remain to be verified. Most main navigation, question flows, and evidence answers are bilingual; some detailed public explanatory text and admin labels remain English and need editorial Tamil translation before a full bilingual release.
 
 ## What is built
 
@@ -48,6 +48,7 @@ supabase/
   config.toml
   migrations/001_evidence.sql
   migrations/002_atomic_review.sql
+  migrations/003_database_rate_limit.sql
 scripts/seed.ts, evaluate.ts, smoke.mjs
 tests/evidence.test.ts, integration/rls.sql
 .env.example
@@ -89,19 +90,19 @@ npm start
 | `AI_BASE_URL` | HTTPS OpenAI-compatible endpoint; default `https://api.openai.com/v1` |
 | `AI_EMBEDDING_MODEL` | Embedding model; default `text-embedding-3-small`, must support 1536 dimensions |
 | `APP_URL` | Trusted origin, e.g. `http://localhost:3000` or production URL |
-| `UPSTASH_REDIS_REST_URL` | Production shared rate-limit storage |
-| `UPSTASH_REDIS_REST_TOKEN` | Server-only rate-limit credential |
+| `UPSTASH_REDIS_REST_URL` | Optional Redis rate-limit storage |
+| `UPSTASH_REDIS_REST_TOKEN` | Optional server-only Redis credential |
 
-In production with a configured database, public write/question endpoints fail closed without a shared rate limiter. Development/demo mode uses a process-local limiter; this is not a distributed production substitute.
+A configured database provides a durable 20-request-per-minute rate limiter through migration 003. Keys are SHA-256 hashes, and expired counters are removed. Redis is optional and takes priority when configured. Missing or failed production limit storage fails closed. Development/demo mode uses a process-local limiter.
 
 ## Supabase and pgvector setup
 
 1. Create a Supabase project. Disable public sign-up in Auth settings; provision administrator accounts through the dashboard or Admin API.
 2. Set the three Supabase environment values in `.env.local`.
-3. Apply `001_evidence.sql`, then `002_atomic_review.sql`, using the Supabase SQL editor or CLI migrations. `001` enables `vector` in `extensions`, creates all tables/indexes/RLS policies and the private `evidence` Storage bucket.
+3. Apply `001_evidence.sql`, then `002_atomic_review.sql` and `003_database_rate_limit.sql`, using the Supabase SQL editor or CLI migrations. `001` enables `vector` in `extensions`, creates all tables/indexes/RLS policies and the private `evidence` Storage bucket.
 4. Run `npm run seed`. This is an explicit administrative seed operation, not automatic crawling.
 5. Inspect the source document, translations and seed records yourself before launch. Record any editorial corrections through the review workflow.
-6. Configure a distributed rate limiter before public production use.
+6. Migration 003 configures a database-backed distributed rate limiter. Redis is optional.
 
 CLI alternative: link your Supabase project and run `supabase db push`. `supabase/config.toml` disables public signup for local CLI deployments; apply the same setting explicitly to a hosted project.
 
@@ -109,7 +110,7 @@ CLI alternative: link your Supabase project and run `supabase db push`. `supabas
 
 `001_evidence.sql` creates `schemes`, `departments`, `categories`, `districts`, `scheme_districts`, `documents`, `document_chunks`, `claims`, `claim_sources`, `claim_versions`, `statistics`, `budgets`, `beneficiaries`, `outcomes`, `timeline_events`, `citations`, `verification_records`, `source_domains`, `admin_users`, `chat_sessions`, `chat_messages`, `answer_snapshots`, `feedback`, and `audit_logs`.
 
-It includes full-text and HNSW vector indexes, verification constraints, source-domain checks, version history and private storage policies. `002_atomic_review.sql` adds a service-role-only transactional review RPC. Publication of the document, claim and scheme occurs in one transaction; a failed constraint rolls back the publication.
+It includes full-text and HNSW vector indexes, verification constraints, source-domain checks, version history and private storage policies. `002_atomic_review.sql` adds a service-role-only transactional review RPC. `003_database_rate_limit.sql` adds a service-role-only atomic rate-limit RPC and an RLS-protected counter table. Publication of the document, claim and scheme occurs in one transaction; a failed constraint rolls back the publication.
 
 Public RLS reads are limited to published records; admin writes require `is_admin()`. Anonymous clients cannot write directly to claims or sources or read private chat, feedback, audit or original-file storage. Server routes using the service role independently enforce authorization and published/source-enabled status. Raw document text and embeddings are never passed to public client components.
 
@@ -183,7 +184,7 @@ Unsupported questions return the required Tamil/English insufficient-evidence me
 - `tests/evidence.test.ts`: unsupported claims, wrong citations, Tamil/Tanglish, source whitelist, missing admin authentication, injection separation, temporal conflicts and semantic distinctions.
 - `scripts/evaluate.ts`: expected evidence IDs for seven initial questions, including unsupported employment/training counts.
 - `scripts/smoke.mjs`: actual Next.js routes and APIs.
-- `tests/integration/rls.sql`: a disposable-project RLS test script. **Not executed without a Supabase environment**.
+- `tests/integration/rls.sql`: a disposable-project RLS test script. Anonymous read/write isolation was also checked in the live seeded project in a rolled-back transaction.
 
 For live RLS verification, execute the integration SQL in a disposable migrated/seeded Supabase project, and add tests for authenticated non-admin versus admin roles, Storage policies and RPC authorization. Verify that anonymous users can read only safe published columns and cannot bypass the server's approval path.
 
@@ -193,16 +194,16 @@ For live RLS verification, execute the integration SQL in a disposable migrated/
 2. Use Node.js 24 LTS. Build command: `npm run build`. Leave Output Directory at the Next.js framework default; do not set a custom output directory.
 3. Configure all production environment variables. Set `APP_URL` to the actual deployment origin. Keep service role, AI key and Redis token server-only.
 4. Apply Supabase migrations and seed/review the sources separately; Vercel builds intentionally do not run database migrations.
-5. Disable Supabase public signup, provision the first admin and configure Redis rate limiting.
+5. Disable Supabase public signup, provision the first admin and apply the database rate-limit migration (Redis is optional).
 6. Deploy, then verify public questions, citation inspection, live sign-in, upload/review/publish, corrections, sharing and RLS on the deployed origin.
 
-No Vercel deployment was performed by this delivery.
+The project is deployed to https://tamil-nadu-governance-ai.vercel.app. Supabase is linked to the Production environment through the Vercel integration. Changes to environment variables and code require a fresh production deployment.
 
 ## Security and remaining work
 
 Before calling this production-ready, complete:
 
-- Apply and test migrations, RLS, Auth, Storage, review transactions and provider integration against real credentials.
+- Verify authenticated admin and non-admin RLS, Storage uploads, review transactions and optional AI provider against the live project.
 - Visual/mobile/browser and assistive-technology QA; validate WCAG AA contrast and keyboard use at 200% zoom. Evidence drawer includes focus trapping/return and Escape dismissal, but compliance is not certified.
 - Complete editorial Tamil translations for every public helper label, empty state and detailed explanation; administrator UX currently uses English.
 - Background ingestion/embedding jobs, retry/idempotency controls, OCR and DOCX decompression/resource isolation for larger inputs; current candidate extraction is deterministic sentence splitting, not AI structured extraction.
